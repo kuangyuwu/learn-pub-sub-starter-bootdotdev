@@ -1,6 +1,8 @@
 package pubsub
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 
@@ -70,6 +72,63 @@ func SubscribeJSON[T any](
 	simpleQueueType SimpleQueueType,
 	handler func(T) AckType,
 ) error {
+	return subscibe(
+		conn,
+		exchange,
+		queueName,
+		key,
+		simpleQueueType,
+		handler,
+		func(data []byte) (T, error) {
+			var t T
+			err := json.Unmarshal(data, &t)
+			if err != nil {
+				var zero T
+				return zero, err
+			}
+			return t, err
+		},
+	)
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	return subscibe(
+		conn,
+		exchange,
+		queueName,
+		key,
+		simpleQueueType,
+		handler,
+		func(data []byte) (T, error) {
+			buf := bytes.NewBuffer(data)
+			dec := gob.NewDecoder(buf)
+			var t T
+			err := dec.Decode(&t)
+			if err != nil {
+				var zero T
+				return zero, err
+			}
+			return t, err
+		},
+	)
+}
+
+func subscibe[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType SimpleQueueType,
+	handler func(T) AckType,
+	unmarshaller func([]byte) (T, error),
+) error {
 	consumeCh, queue, err := DeclareAndBind(
 		conn,
 		exchange,
@@ -96,8 +155,11 @@ func SubscribeJSON[T any](
 
 	go func() {
 		for delivery := range deliveryCh {
-			var t T
-			json.Unmarshal(delivery.Body, &t)
+			t, err := unmarshaller(delivery.Body)
+			if err != nil {
+				fmt.Printf("error: %s", err)
+				delivery.Nack(false, true)
+			}
 			ackType := handler(t)
 			switch ackType {
 			case Ack:
@@ -109,5 +171,6 @@ func SubscribeJSON[T any](
 			}
 		}
 	}()
+
 	return nil
 }

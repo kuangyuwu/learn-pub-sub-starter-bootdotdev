@@ -38,6 +38,18 @@ func main() {
 	}
 	log.Printf("Queue %s declared and bound!", queue.Name)
 
+	err = pubsub.SubscribeGob(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		routing.GameLogSlug+".*",
+		pubsub.Durable,
+		handlerGameLog(),
+	)
+	if err != nil {
+		log.Fatalf("could not subscribe to %s: %s", routing.GameLogSlug, err)
+	}
+
 	gamelogic.PrintServerHelp()
 
 	for {
@@ -80,5 +92,15 @@ func main() {
 		default:
 			fmt.Printf("Unknown command")
 		}
+	}
+}
+
+func handlerGameLog() func(gamelog routing.GameLog) pubsub.AckType {
+	return func(gamelog routing.GameLog) pubsub.AckType {
+		err := gamelogic.WriteLog(gamelog)
+		if err != nil {
+			return pubsub.NackRequeue
+		}
+		return pubsub.Ack
 	}
 }
