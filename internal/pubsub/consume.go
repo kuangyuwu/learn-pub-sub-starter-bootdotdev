@@ -140,6 +140,7 @@ func subscibe[T any](
 		return fmt.Errorf("could not bind %s: %w", exchange, err)
 	}
 
+	consumeCh.Qos(10, 0, false)
 	deliveryCh, err := consumeCh.Consume(
 		queue.Name,
 		"",
