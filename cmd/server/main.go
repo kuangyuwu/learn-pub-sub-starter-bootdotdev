@@ -34,7 +34,7 @@ func main() {
 		pubsub.Durable,
 	)
 	if err != nil {
-		log.Fatalf("could not subscribe to %s", routing.ExchangePerilTopic)
+		log.Fatalf("could not subscribe to %s: %s", routing.ExchangePerilTopic, err)
 	}
 	log.Printf("Queue %s declared and bound!", queue.Name)
 
